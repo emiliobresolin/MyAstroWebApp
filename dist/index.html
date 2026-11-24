@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101730">
+  <title>Mapa natal · Órbita</title>
+  <link rel="stylesheet" href="vendor/leaflet.css">
+  <link rel="stylesheet" href="style.css">
+  <script defer src="vendor/astronomy.browser.min.js"></script>
+  <script defer src="vendor/leaflet.js"></script>
+  <script defer src="vendor/world-countries.js"></script>
+  <script defer src="vendor/tz-lookup.js"></script>
+  <script defer src="calculos.js"></script>
+  <script defer src="app.js"></script>
+  <script defer src="locais.js"></script>
+  <script defer src="tempos.js"></script>
+  <script defer src="tradicao.js"></script>
+  <script defer src="explorador.js"></script>
+  <script defer src="analises.js"></script>
+</head>
+<body>
+  <main>
+    <header class="masthead">
+      <div class="brand"><span aria-hidden="true">✦</span> ÓRBITA</div>
+      <div class="header-actions">
+        <span class="method">Zodíaco tropical</span>
+        <form id="logout" method="post" action="/logout" hidden><button class="secondary compact" type="submit">Sair</button></form>
+      </div>
+    </header>
+    <div class="page-heading">
+      <div><h1>Mapa natal</h1><p class="intro">Explore o céu do nascimento.</p></div>
+      <nav class="section-links" aria-label="Seções"><a href="#dados">Nascimento</a><a href="#tradicional">Técnicas tradicionais</a><a href="#previsoes">Previsões</a></nav>
+    </div>
+    <div class="layout">
+      <section class="panel inputs" aria-labelledby="dados">
+        <h2 id="dados">Dados de nascimento</h2>
+        <form id="birth">
+          <div class="fields">
+            <label>Data <input required type="date" name="date" min="1800-01-01" max="2100-12-31"></label>
+            <label>Hora local <input required type="time" name="time"></label>
+          </div>
+          <div class="location">
+            <label for="city">Cidade de nascimento</label>
+            <div class="city-search">
+              <input id="city" type="search" placeholder="Ex. Recife, Lisboa, Tóquio">
+              <button type="button" class="secondary" id="search-city">Buscar</button>
+            </div>
+            <p class="hint" id="search-status" role="status">A busca mundial usa internet. O mapa funciona offline.</p>
+            <ul id="city-results" class="city-results" hidden></ul>
+            <div id="place-map" aria-label="Mapa para selecionar coordenadas"></div>
+            <p class="hint" id="place-name" aria-live="polite">Clique no mapa ou informe as coordenadas.</p>
+          </div>
+          <div class="fields">
+            <label>Latitude <input required type="number" name="latitude" min="-89.99" max="89.99" step="any" placeholder="-23.5505"></label>
+            <label>Longitude <input required type="number" name="longitude" min="-180" max="180" step="any" placeholder="-46.6333"></label>
+            <label class="toggle wide"><input type="checkbox" name="autoOffset" checked> Detectar fuso pela data e pelo local</label>
+            <label class="wide" id="manual-offset" hidden>Fuso UTC <input required disabled name="offset" placeholder="-03:00" pattern="[+\-][0-9]{2}:[0-9]{2}"></label>
+            <p class="hint" id="offset-help" aria-live="polite"></p>
+            <label class="wide">Sistema de casas
+              <select name="houseSystem">
+                <option value="whole">Signos inteiros</option>
+                <option value="equal">Casas iguais a partir do Ascendente</option>
+                <option value="placidus">Placidus</option>
+              </select>
+            </label>
+          </div>
+          <p class="hint">Sul e oeste usam valores negativos.</p>
+          <button type="submit">Calcular mapa</button>
+          <button class="secondary" type="button" id="example">Usar exemplo de São Paulo</button>
+          <p class="error" id="error" role="alert" hidden></p>
+        </form>
+      </section>
+      <section class="panel results" aria-labelledby="result-title">
+        <header class="chart-header">
+          <h2 id="result-title">Roda zodiacal</h2>
+          <p class="hint" id="chart-time" aria-live="polite"></p>
+        </header>
+        <div class="highlights" id="highlights"></div>
+        <div class="chart-stage">
+          <canvas id="wheel" role="img" aria-label="Roda zodiacal interativa" aria-describedby="wheel-guide"></canvas>
+        </div>
+        <p class="hint wheel-key" id="wheel-guide">Arraste para girar. Toque em um símbolo ou escolha um astro para ver seus aspectos.</p>
+        <div class="chart-controls">
+          <div class="rotate-controls" role="group" aria-label="Rotação da roda">
+            <button type="button" class="secondary icon-action" id="rotate-left" aria-label="Girar 15 graus para a esquerda">↶</button>
+            <button type="button" class="secondary icon-action" id="rotate-right" aria-label="Girar 15 graus para a direita">↷</button>
+            <button type="button" class="secondary" id="rotate-reset">Restaurar orientação</button>
+          </div>
+          <label class="toggle layers"><input id="show-aspects" type="checkbox" checked> Linhas de aspecto</label>
+        </div>
+        <div class="astro-inspector">
+          <label>Inspecionar astro<select id="astro-focus"></select></label>
+          <div role="status" id="astro-details"></div>
+        </div>
+        <details class="table-wrap">
+          <summary>Posições do mapa</summary>
+          <table aria-label="Posições do mapa">
+            <thead><tr><th scope="col">Ponto</th><th scope="col">Signo</th><th scope="col">Casa</th><th scope="col">Posição</th></tr></thead>
+            <tbody id="positions"></tbody>
+          </table>
+        </details>
+        <details class="table-wrap">
+          <summary>Cúspides das casas</summary>
+          <table aria-label="Cúspides das casas"><thead><tr><th scope="col">Casa</th><th scope="col">Signo</th><th scope="col">Posição</th></tr></thead><tbody id="houses"></tbody></table>
+        </details>
+        <details class="table-wrap">
+          <summary>Aspectos principais</summary>
+          <p class="hint">As linhas na roda ligam os astros envolvidos. A orbe é a distância até o ângulo exato.</p>
+          <p class="hint" id="no-aspects" hidden>Nenhum aspecto dentro das orbes usadas.</p>
+          <table id="aspect-table" aria-label="Aspectos principais"><thead><tr><th scope="col">Astros</th><th scope="col">Aspecto</th><th scope="col">Orbe</th></tr></thead><tbody id="aspects"></tbody></table>
+        </details>
+      </section>
+    </div>
+    <section class="panel workspace" aria-labelledby="tradicional">
+      <h2 id="tradicional">Técnicas tradicionais</h2>
+      <p class="hint" id="sect"></p>
+      <p class="hint">Selecione um resultado para ver seus detalhes e sua posição na roda.</p>
+      <details>
+        <summary>Almuten e dignidades</summary>
+        <p class="hint">Pontuação 5/4/3/2/1 por domicílio, exaltação, triplicidade de seita, termos egípcios e faces caldaicas. O total reúne Sol, Lua, Ascendente, Fortuna e a longitude lunar da última sizígia.</p>
+        <p id="almuten-result"></p>
+        <div id="almuten-tables"></div>
+      </details>
+      <details><summary>Sete lotes herméticos</summary><p class="hint">Fórmulas de Paulo de Alexandria, invertidas para mapas noturnos.</p><div id="lots-table"></div></details>
+      <details><summary>Antíscia e contra-antíscia</summary><div id="mirror-table"></div></details>
+      <details><summary>Recepções</summary><p class="hint">Dignidades entre os sete astros tradicionais. A tabela informa separadamente se há aspecto entre eles.</p><div id="receptions-table"></div></details>
+      <details><summary>Estrelas fixas</summary><p class="hint">Nove estrelas e conjunções em longitude com orbe de 1°. Coordenadas J2000 projetadas na eclíptica da data, com precessão e sem movimento próprio.</p>
+        <label class="toggle"><input id="stars-conjunctions" type="checkbox"> Mostrar só estrelas em conjunção natal</label><div id="stars-table"></div>
+      </details>
+    </section>
+    <section class="panel workspace" aria-labelledby="previsoes">
+      <h2 id="previsoes">Técnicas de previsão</h2>
+      <p class="hint">Data e hora de referência em UTC. Selecione um resultado para comparar posições ou usar o horário de um evento.</p>
+      <form id="timing" class="timing-form">
+        <div class="date-control">
+          <label for="reference-date">Data de referência</label>
+          <div class="date-stepper">
+            <button class="secondary icon-action" type="button" id="previous-day" aria-label="Voltar um dia">−</button>
+            <input id="reference-date" name="reference" type="date" required min="1800-01-01" max="2100-12-31">
+            <button class="secondary icon-action" type="button" id="next-day" aria-label="Avançar um dia">+</button>
+          </div>
+        </div>
+        <label>Hora UTC <input name="clock" type="time" required value="12:00"></label>
+        <label>Período da agenda
+          <select name="days"><option value="7">7 dias</option><option value="14" selected>14 dias</option><option value="30">30 dias</option></select>
+        </label>
+        <details class="return-place">
+          <summary>Outro local para a revolução solar</summary>
+          <p class="hint">Deixe os dois campos vazios para usar o local de nascimento.</p>
+          <div class="fields">
+            <label>Latitude <input name="returnLat" type="number" min="-89.99" max="89.99" step="any"></label>
+            <label>Longitude <input name="returnLon" type="number" min="-180" max="180" step="any"></label>
+          </div>
+        </details>
+        <button type="submit">Calcular previsões</button>
+        <p class="error" id="timing-error" role="alert" hidden></p>
+      </form>
+      <div id="timing-results" hidden>
+        <details open><summary>Profecção anual</summary><p id="profection-text"></p><div id="profection-years" class="profection-years" role="group" aria-label="Anos do ciclo de profecção"></div></details>
+        <details><summary>Progressões secundárias</summary><p class="hint" id="progression-time"></p><div id="progression-table"></div><div id="progression-aspects"></div></details>
+        <details>
+          <summary>Revolução solar</summary>
+          <p class="hint" id="solar-time"></p>
+          <canvas id="solar-wheel" role="img" aria-label="Roda da revolução solar. As posições estão na tabela abaixo."></canvas>
+          <button type="button" class="secondary compact" id="explore-solar">Explorar roda da revolução</button>
+          <div id="solar-table"></div>
+          <div id="solar-aspects"></div>
+        </details>
+        <details open><summary>Trânsitos diários</summary><p class="hint" id="daily-time"></p><div id="daily-table"></div><div id="daily-aspects"></div><div id="daily-events"></div></details>
+        <details open>
+          <summary>Agenda de previsões</summary>
+          <p class="hint" id="forecast-time"></p>
+          <div id="forecast-summary"></div>
+          <div class="fields forecast-filters">
+            <label>Astro em trânsito<select id="forecast-planet"><option value="">Todos os astros</option></select></label>
+            <label>Aspecto<select id="forecast-aspect"><option value="">Todos os aspectos</option></select></label>
+          </div>
+          <p class="hint" id="forecast-count" role="status"></p>
+          <div id="forecast-events"></div>
+        </details>
+      </div>
+    </section>
+    <footer>Os cálculos ficam no navegador. A busca envia somente o texto da cidade ao Open-Meteo. Mapa base Natural Earth.</footer>
+  </main>
+  <dialog id="point-explorer" aria-labelledby="explorer-title">
+    <header class="chart-header"><h2 id="explorer-title"></h2><button id="explorer-close" class="secondary" type="button">Fechar</button></header>
+    <p id="explorer-note"></p>
+    <canvas id="explorer-wheel" role="img" aria-label="Roda com os pontos selecionados. Os graus estão na lista abaixo."></canvas>
+    <div class="rotate-controls" role="group" aria-label="Rotação do detalhe">
+      <button type="button" class="secondary icon-action" id="explorer-left" aria-label="Girar 15 graus para a esquerda">↶</button>
+      <button type="button" class="secondary icon-action" id="explorer-right" aria-label="Girar 15 graus para a direita">↷</button>
+      <button type="button" class="secondary" id="explorer-reset">Restaurar orientação</button>
+    </div>
+    <ol id="explorer-points"></ol>
+    <button id="explorer-use-event" type="button" hidden>Usar data e hora na previsão</button>
+  </dialog>
+</body>
+</html>

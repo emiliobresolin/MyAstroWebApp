@@ -1,0 +1,7 @@
+node_modules/
+.wrangler/
+.private/
+.dev.vars*
+.env*
+*.exe
+*.dll

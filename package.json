@@ -1,0 +1,11 @@
+{
+  "name": "my-astro-web-app",
+  "private": true,
+  "scripts": {
+    "test": "node --test",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.168.0"
+  }
+}
